@@ -69,6 +69,10 @@ public class MainApplication {
 
 ------
 
+### JWT 설정
+
+`package : security `
+
 
 
 #### JWT TokenProvider
@@ -144,11 +148,34 @@ public class TokenProvider {
 
     /**
      * Token 유효성검사
-     * @param authToken
+     * @param token
      */
-    public void validateToken(String authToken) {
+    public void validateToken(String token) {
         String jwtSecret = Base64Utils.encodeToString(appProperties.getAuth().getTokenSecret().getBytes());
-        Jwts.parser().setSigningKey(jwtSecret).parseClaimsJws(authToken);
+        Jwts.parser().setSigningKey(jwtSecret).parseClaimsJws(token);
+    }
+
+    /**
+     * AccessToken 유효성검사
+     * @param accessToken
+     */
+    public void validateAccessToken(String accessToken) {
+
+        if (!getTypeFromToken(accessToken).equals("access")) {
+            throw new JwtException("토큰 타입이 불일치 합니다. access Token이 필요합니다", "404");
+        }
+
+        try {
+            validateToken(accessToken);
+        } catch (SignatureException exception) {
+            throw new JwtException("Invalid JWT signature", "400");
+        } catch (MalformedJwtException exception) {
+            throw new JwtException("Invalid JWT token", "401");
+        } catch (ExpiredJwtException exception) {
+            throw new JwtException("Expired JWT token", "402");
+        } catch (UnsupportedJwtException exception) {
+            throw new JwtException("Unsupported JWT token", "403");
+        }
     }
 
     /**
@@ -164,6 +191,35 @@ public class TokenProvider {
                 .getBody();
 
         return Long.parseLong(claims.getSubject());
+    }
+
+    /**
+     * Token에 Type값 조회
+     * @param token
+     * @return
+     */
+    public String getTypeFromToken(String token) {
+        String jwtSecret = Base64Utils.encodeToString(appProperties.getAuth().getTokenSecret().getBytes());
+        Claims claims = Jwts.parser()
+                .setSigningKey(jwtSecret)
+                .parseClaimsJws(token)
+                .getBody();
+        return claims.get("type").toString();
+    }
+
+    /**
+     * Token에 Role값 조회
+     * @param token
+     * @return
+     */
+    public String getRoleFromToken(String token) {
+        String jwtSecret = Base64Utils.encodeToString(appProperties.getAuth().getTokenSecret().getBytes());
+        Claims claims = Jwts.parser()
+                .setSigningKey(jwtSecret)
+                .parseClaimsJws(token)
+                .getBody();
+
+        return claims.get("role").toString();
     }
 
     /**
@@ -187,5 +243,320 @@ public class TokenProvider {
 
 }
 
+
 ```
 
+
+
+#### JWT TokenAuthenticationFilter
+
+> JWT 인증 토큰을 읽고, 확인하고, SecurityContext 토큰이 유효한 경우 Spring Securirty를 설정 하는데 사용
+>
+> UserPasswordAuthenticationToken : 사용자 인증용 객체
+>
+> authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request)) : 서버 측의 현재 요청에 대한 세션 정보를로드
+
+```java
+@Component
+@RequiredArgsConstructor
+public class TokenAuthenticationFilter extends OncePerRequestFilter {
+
+    private final TokenProvider tokenProvider;
+
+    private final CustomUserDetailsService customUserDetailsService;
+
+    private final ObjectMapper objectMapper;
+
+    private static final Logger logger = LoggerFactory.getLogger(TokenAuthenticationFilter.class);
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+        try {
+            String jwt = tokenProvider.getJwtFromRequest(request);
+
+            if (StringUtils.hasText(jwt)) {
+//                Long userId = tokenProvider.getMemberIdFromToken(jwt);
+                tokenProvider.validateAccessToken(jwt);
+                authMember(request, jwt);
+            }
+        } catch (JwtException e) {
+            logger.error(e.getMessage());
+            jwtResponse(response, e.getErrorCode(), e.getMessage());
+            return;
+        } catch (ResourceNotFoundException e) {
+            logger.error(e.getMessage());
+            jwtResponse(response, e.getErrorCode(), e.getMessage());
+            return;
+        }
+
+        filterChain.doFilter(request, response);
+    }
+
+    /**
+     * Jwt 토큰으로 인증정보 조회
+     * @param request
+     * @param jwt
+     */
+    private void authMember(HttpServletRequest request, String jwt) {
+        UserDetails userDetails = loadUserByJwt(jwt);
+        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+    }
+
+    private void jwtResponse(HttpServletResponse response, String errorCode, String message) throws IOException {
+        ApiResponse apiResponse = new ApiResponse(false, errorCode, message);
+        String responseString = objectMapper.writeValueAsString(apiResponse);
+        response.setContentType("application/json;charset=UTF-8");
+        logger.info("responseString : " + responseString);
+        response.setStatus(HttpStatus.UNAUTHORIZED.value());
+        response.getWriter().write(responseString);
+    }
+
+    /**
+     * JWT 토큰으로 DB 정보 조회
+     * @param jwt
+     * @return
+     */
+    private UserDetails loadUserByJwt(String jwt) {
+        String role = tokenProvider.getRoleFromToken(jwt);
+        if (role.equals("ROLE_MEMBER")) {
+            return customUserDetailsService.loadUserById(tokenProvider.getMemberIdFromToken(jwt));
+        } else if (role.equals("ROLE_ADMIN")) {
+            return customUserDetailsService.loadUserById(tokenProvider.getMemberIdFromToken(jwt));
+        }
+        return null;
+    }
+}
+```
+
+
+
+#### JWT RestAuthenticationEntryPoint
+
+> 사용자가 인증없이 보호 된 리소스에 액세스하려고 할 때 호출됩니다. 이 경우 401 Unauthorized 응답을 반환
+
+```java
+public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
+
+    @Override
+    public void commence(HttpServletRequest request, HttpServletResponse response, AuthenticationException authException) throws IOException, ServletException {
+        response.sendError(HttpServletResponse.SC_UNAUTHORIZED, authException.getLocalizedMessage());
+    }
+}
+```
+
+
+
+------
+
+## OAuth2 설정
+
+
+
+### OAuth2 인증을위한 사용자 정의 클래스
+
+#### OAuth2UserInfo 매핑
+
+> 인증 된 사용자의 세부 정보를 가져올 때 모든 OAuth2 공급자는 다른 JSON 응답을 반환
+>
+> 스프링 보안은 일반적인 `map`키-값 쌍 의 형태로 응답을 구문 분석
+
+##### OAuth2UserInfo.class
+
+> 일반 `map`키-값 쌍 에서 사용자의 필수 세부 정보를 가져 오는 데 사용
+
+```java
+public abstract class OAuth2UserInfo {
+    protected Map<String, Object> attributes;
+
+    public OAuth2UserInfo(Map<String, Object> attributes) {
+        this.attributes = attributes;
+    }
+
+    public Map<String, Object> getAttributes() {
+        return attributes;
+    }
+
+    public abstract String getId();
+
+    public abstract String getName();
+
+    public abstract String getEmail();
+}
+```
+
+##### GoogleOAuth2UserInfo.class
+
+```java
+public class GoogleOAuth2UserInfo extends OAuth2UserInfo{
+
+    public GoogleOAuth2UserInfo(Map<String, Object> attributes) {
+        super(attributes);
+    }
+
+    @Override
+    public String getId() {
+        return (String) attributes.get("sub");
+    }
+
+    @Override
+    public String getName() {
+        return (String) attributes.get("name");
+    }
+
+    @Override
+    public String getEmail() {
+        return (String) attributes.get("email");
+    }
+
+    @Override
+    public String getImageUrl() {
+        return (String) attributes.get("picture");
+    }
+}
+```
+
+
+
+### HttpCookieOAuth2AuthorizationRequestRepository
+
+> OAuth2 프로토콜은 `state`CSRF 공격을 방지하기 위해 매개 변수 사용을 권장
+>
+> 인증 중에 애플리케이션은 인증 요청에서이 매개 변수를 전송하고 OAuth2 공급자는 OAuth2 콜백에서 변경되지 않은이 매개 변수를 반환
+>
+> 응용 프로그램은 `state`OAuth2 공급자에서 반환 된 매개 변수의 값을 초기에 보낸 값과 비교하고 일치하지 않으면 인증 요청을 거부
+>
+> 이 흐름을 얻으려면 애플리케이션이 `state`매개 변수를 어딘가에 저장하여 나중에 `state`OAuth2 공급자에서 반환 된 것과 비교할 수 있도록 해야 하고 쿠키에 `state` 뿐만 아니라 `redirect_uri` 도 저장
+>
+> HttpCookieOAuth2AuthorizationRequestRepository 인증 요청을 쿠키에 저장하고 검색하는 기능을 제공
+
+##### HttpCookieOAuth2AuthorizationRequestRepository.class
+
+```java
+@Component
+public class HttpCookieOAuth2AuthorizationRequestRepository implements AuthorizationRequestRepository<OAuth2AuthorizationRequest> {
+    public static final String OAUTH2_AUTHORIZATION_REQUEST_COOKIE_NAME = "oauth2_auth_request";
+    public static final String REDIRECT_URI_PARAM_COOKIE_NAME = "redirect_uri";
+    private static final int cookieExpireSeconds = 180;
+
+    @Override
+    public OAuth2AuthorizationRequest loadAuthorizationRequest(HttpServletRequest request) {
+        return CookieUtils.getCookie(request, OAUTH2_AUTHORIZATION_REQUEST_COOKIE_NAME)
+                .map(cookie -> CookieUtils.deserialize(cookie, OAuth2AuthorizationRequest.class))
+                .orElse(null);
+    }
+
+    @Override
+    public void saveAuthorizationRequest(OAuth2AuthorizationRequest authorizationRequest, HttpServletRequest request, HttpServletResponse response) {
+        if (authorizationRequest == null) {
+            CookieUtils.deleteCookie(request, response, OAUTH2_AUTHORIZATION_REQUEST_COOKIE_NAME);
+            CookieUtils.deleteCookie(request, response, REDIRECT_URI_PARAM_COOKIE_NAME);
+        }
+
+        CookieUtils.addCookie(response, OAUTH2_AUTHORIZATION_REQUEST_COOKIE_NAME, CookieUtils.serialize(authorizationRequest), cookieExpireSeconds);
+        String redirectUriAfterLogin = request.getParameter(REDIRECT_URI_PARAM_COOKIE_NAME);
+        if (StringUtils.isNotBlank(redirectUriAfterLogin)) {
+            CookieUtils.addCookie(response, REDIRECT_URI_PARAM_COOKIE_NAME, redirectUriAfterLogin, cookieExpireSeconds);
+        }
+    }
+
+    @Override
+    public OAuth2AuthorizationRequest removeAuthorizationRequest(HttpServletRequest request) {
+        return this.loadAuthorizationRequest(request);
+    }
+
+    public void removeAuthorizationRequestCookies(HttpServletRequest request, HttpServletResponse response) {
+        CookieUtils.deleteCookie(request, response, OAUTH2_AUTHORIZATION_REQUEST_COOKIE_NAME);
+        CookieUtils.deleteCookie(request, response, REDIRECT_URI_PARAM_COOKIE_NAME);
+    }
+}
+```
+
+
+
+### CustomOAuth2UserService
+
+> `CustomOAuth2UserService` 는 Spring Security의 `DefaultOAuth2UserService` 상속하고 `loadUser()` 메소드를 구현
+> 이 메소드는 OAuth2 공급자로부터 액세스 토큰을 얻은 후에 호출
+>
+> 먼저 OAuth2 공급자로부터 사용자의 세부 정보를 가져오고 동일한 이메일을 사용하는 사용자가 이미 데이터베이스에 있는 경우 세부 정보를 업데이트하고 그렇지 않으면 새 사용자를 등록
+
+##### CustomOAuth2UserService.class
+
+```java
+@Service
+@RequiredArgsConstructor
+public class CustomOAuth2UserService extends DefaultOAuth2UserService {
+
+    private final MemberRepository memberRepository;
+    private final AppProperties appProperties;
+
+    @Override
+    public OAuth2User loadUser(OAuth2UserRequest oAuth2UserRequest) throws OAuth2AuthenticationException {
+        OAuth2User oAuth2User = super.loadUser(oAuth2UserRequest);
+
+        try {
+            return processOAuth2User(oAuth2UserRequest, oAuth2User);
+        } catch (AuthenticationException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new InternalAuthenticationServiceException(e.getMessage(), e.getCause());
+        }
+    }
+
+    private OAuth2User processOAuth2User(OAuth2UserRequest oAuth2UserRequest, OAuth2User oAuth2User) {
+        OAuth2UserInfo oAuth2UserInfo = OAuth2UserInfoFactory.getOAuth2UserInfo(oAuth2UserRequest.getClientRegistration().getRegistrationId(), oAuth2User.getAttributes());
+
+        if (StringUtils.isEmpty(oAuth2UserInfo.getEmail())) {
+            throw new OAuth2AuthenticationProcessingException("OAuth2 Provider에 이메일이 없습니다.");
+        }
+
+        Optional<Member> memberOptional = memberRepository.findByEmail(oAuth2UserInfo.getEmail());
+
+        Member member;
+        if (memberOptional.isPresent()) {
+            member = memberOptional.get();
+            if (!member.getProvider().equals(AuthProvider.valueOf(oAuth2UserRequest.getClientRegistration().getRegistrationId()))) {
+                throw new OAuth2AuthenticationProcessingException("이미 등록된 회원입니다.");
+            }
+
+            member = updateExistingMember(member, oAuth2UserInfo);
+        } else {
+            member = registerNewMember(oAuth2UserRequest, oAuth2UserInfo);
+        }
+
+        return UserPrincipal.create(member, oAuth2User.getAttributes());
+    }
+
+    private Member registerNewMember(OAuth2UserRequest oAuth2UserRequest, OAuth2UserInfo oAuth2UserInfo) {
+        AuthProvider authProvider = AuthProvider.valueOf(oAuth2UserRequest.getClientRegistration().getRegistrationId());
+
+        Member member = Member.builder()
+                .name(oAuth2UserInfo.getName())
+                .email(oAuth2UserInfo.getEmail())
+                .provider(authProvider)
+                .providerId(oAuth2UserInfo.getId())
+                .imageUrl(oAuth2UserInfo.getImageUrl())
+                .build();
+
+        return memberRepository.save(member);
+    }
+
+    private Member updateExistingMember(Member member, OAuth2UserInfo oAuth2UserInfo) {
+        member.updateExistingMember(oAuth2UserInfo.getName(), oAuth2UserInfo.getImageUrl());
+        return memberRepository.save(member);
+    }
+
+}
+```
+
+
+
+### OAuth2AuthenticationSuccessHandler
+
+> 인증에 성공하면 Spring Security에서 인증 시 `onAuthenticationSuccess()` 메소드를 호출
+> `SecurityConfig` 의  `OAuth2AuthenticationSuccessHandler`으로 구성
+>
+> 이 방법에서는 몇 가지 유효성 검사를 수행하고 JWT 인증 토큰을 만들고 `redirect_uri`쿼리 문자열에 추가 된 JWT 토큰을 사용하여 클라이언트가 지정한로 사용자를 리디렉션
