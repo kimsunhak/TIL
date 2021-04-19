@@ -2,15 +2,170 @@
 
 
 
-#### config -> AppProperties 바인딩 방법
+### CORS 활성화
+
+> FrontEnd Client가 어플리케이션에 접근 할 수 있도록 CORS를 활성화
+>
+> 아래의 설정은 모든 Origin을 활성화하므로 상용에서는 수정해서 사용
+
+##### WebMvcConfig.class
+
+```java
+@Configuration
+public class WebMvcConfig implements WebMvcConfigurer {
+    private final long MAX_AGE_SECONDS = 3600;
+
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/**")
+                .allowedOrigins("*")
+                .allowedMethods("GET", "POST", "PATCH", "DELETE", "PUT", "OPTIONS")
+                .allowedHeaders("*")
+                .allowCredentials(true)
+                .maxAge(MAX_AGE_SECONDS);
+    }
+}
+```
+
+
+
+### SecurityConfig 설정
+
+> SecurityConfig 는 보안 구현의 핵심, OAuth2 Social 로그인과 이메일 및 비밀번호 기반 로그인에 대한 구성을 적용
+>
+> - csrf().disable()
+>   - Jwt token을 사용할 것이므로 비활성화 한다.
+>   - 일반 사용자들이 브라우저를 통해 요청을 하는 경우에는 CSRF 방지를 사용하는 것이 좋다.
+> - httpBasic().disable()
+>   - 요청 헤더에 username와 password를 실어 보내면 브라우저 또는 서버가 그 값을 읽어서 인증하는 방식인 Basic 인증을 비활성화 한다.
+
+```java
+@Configuration
+@RequiredArgsConstructor
+@EnableWebSecurity
+@EnableGlobalMethodSecurity(
+        securedEnabled = true,
+        jsr250Enabled = true,
+        prePostEnabled = true
+)
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+
+    private final CustomUserDetailsService customUserDetailsService;
+
+    private final CustomOAuth2UserService customOAuth2UserService;
+
+    private final OAuth2AuthenticationSuccessHandler oAuth2AuthenticationSuccessHandler;
+
+    private final OAuth2AuthenticationFailureHandler oAuth2AuthenticationFailureHandler;
+
+    private final HttpCookieOAuth2AuthorizationRequestRepository httpCookieOAuth2AuthorizationRequestRepository;
+
+    private final TokenAuthenticationFilter tokenAuthenticationFilter;
+
+
+    private static final String[] AUTH_WHITELIST = {
+            // Swagger UI
+            "/v2/api-docs",
+            "/swagger-resources",
+            "/swagger-resources/**",
+            "/configuration/ui",
+            "/configuration/security",
+            "/swagger-ui.html",
+            // static resources
+            "/webjars/**",
+            "/",
+            "/error",
+            "/favicon.ico",
+            "/**/**.css",
+            "/**/**.js",
+            "/**/**.png",
+            "/**/**.jpg",
+            "/**/**.html",
+            "/**/**.woff",
+            "/**/**.otf",
+            "/**/**.eot",
+            // uri
+            "/auth/**",
+            "/redirect"
+    };
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public HttpCookieOAuth2AuthorizationRequestRepository cookieOAuth2AuthorizationRequestRepository() {
+        return new HttpCookieOAuth2AuthorizationRequestRepository();
+    }
+
+    @Bean(BeanIds.AUTHENTICATION_MANAGER)
+    @Override
+    public AuthenticationManager authenticationManagerBean() throws Exception {
+        return super.authenticationManagerBean();
+    }
+
+    @Override
+    protected void configure(AuthenticationManagerBuilder authenticationManagerBuilder) throws Exception {
+        authenticationManagerBuilder
+                .userDetailsService(customUserDetailsService)
+                .passwordEncoder(passwordEncoder());
+    }
+
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http
+                .cors()
+                .and()
+                .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                .and()
+                .csrf()
+                    .disable()
+                .httpBasic()
+                    .disable()
+                .formLogin()
+                    .disable()
+                .exceptionHandling()
+                    .authenticationEntryPoint(new RestAuthenticationEntryPoint())
+                    .and()
+                .authorizeRequests()
+                    .antMatchers(AUTH_WHITELIST)
+                    .permitAll()
+                .antMatchers(
+                        "/api/**")
+                .permitAll()
+                .anyRequest()
+                    .authenticated()
+                    .and()
+                .oauth2Login()
+                    .authorizationEndpoint()
+                        .baseUri("/oauth2/authorize")
+                        .authorizationRequestRepository(httpCookieOAuth2AuthorizationRequestRepository)
+                        .and()
+                    .redirectionEndpoint()
+                        .baseUri("/oauth2/callback/*")
+                        .and()
+                    .userInfoEndpoint()
+                        .userService(customOAuth2UserService)
+                        .and()
+                    .successHandler(oAuth2AuthenticationSuccessHandler)
+                    .failureHandler(oAuth2AuthenticationFailureHandler);
+        http.addFilterBefore(tokenAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+    }
+}
+```
+
+
+
+#### AppProperties 바인딩 방법
 
 > @ConfigurationProperties 란?
 >
 > *.properties, *.yml 파일에 있는 property를 자바 클래스에 값을 가져와서 사용할 수 있게 해주는 어노테이션이다.
 >
-> @ConfigurationProperties 를 사용해 app 으로 시작하는 propertyfmf POJO class로 바인딩
+> @ConfigurationProperties 를 사용해 app 으로 시작하는 property를 POJO class로 바인딩
 
-##### AppProperties.class
+##### config / AppProperties.class
 
 ~~~java
 @Getter
@@ -85,6 +240,8 @@ public class MainApplication {
 > .setExpiration : 토큰 만료 시간
 > .signWith : 사용할 알고리즘과, 시크릿값 셋팅
 > .compact : 토큰 생성
+
+##### security / TokenProvider.class
 
 ```java
 @Service
@@ -420,7 +577,7 @@ public class GoogleOAuth2UserInfo extends OAuth2UserInfo{
 
 
 
-### HttpCookieOAuth2AuthorizationRequestRepository
+#### HttpCookieOAuth2AuthorizationRequestRepository
 
 > OAuth2 프로토콜은 `state`CSRF 공격을 방지하기 위해 매개 변수 사용을 권장
 >
@@ -476,7 +633,7 @@ public class HttpCookieOAuth2AuthorizationRequestRepository implements Authoriza
 
 
 
-### CustomOAuth2UserService
+#### CustomOAuth2UserService
 
 > `CustomOAuth2UserService` 는 Spring Security의 `DefaultOAuth2UserService` 상속하고 `loadUser()` 메소드를 구현
 > 이 메소드는 OAuth2 공급자로부터 액세스 토큰을 얻은 후에 호출
@@ -554,9 +711,96 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 
 
 
-### OAuth2AuthenticationSuccessHandler
+#### OAuth2AuthenticationSuccessHandler
 
-> 인증에 성공하면 Spring Security에서 인증 시 `onAuthenticationSuccess()` 메소드를 호출
-> `SecurityConfig` 의  `OAuth2AuthenticationSuccessHandler`으로 구성
+> 인증에 성공하면 Spring Security는 `SecurityConfig` 에 구성된 `OAuth2AuthenticationSuccessHandler` 의 `onAuthenticationSuccess()` 메소드를 호출
 >
-> 이 방법에서는 몇 가지 유효성 검사를 수행하고 JWT 인증 토큰을 만들고 `redirect_uri`쿼리 문자열에 추가 된 JWT 토큰을 사용하여 클라이언트가 지정한로 사용자를 리디렉션
+> 이 방법에서는 몇 가지 유효성 검사를 수행하고 JWT 인증 토큰을 만들고 재발급을 위한 refreshToken을 만들어 쿼리 문자열에 추가 된 JWT 토큰을 사용하여 클라이언트가 지정한 redirect_uri로 사용자를 리디렉션함
+
+##### OAuth2AuthenticationSuccessHandler.class
+
+```java
+@Component
+@RequiredArgsConstructor
+public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
+
+    private final AuthService authService;
+    private final HttpCookieOAuth2AuthorizationRequestRepository httpCookieOAuth2AuthorizationRequestRepository;
+
+    @Override
+    public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, FilterChain chain, Authentication authentication) throws IOException, ServletException {
+        String targetUrl = determineTargetUrl(request, response, authentication);
+
+        if (response.isCommitted()) {
+            logger.debug("Response has already been committed. Unable to redirect to " + targetUrl);
+        }
+
+        clearAuthenticationAttributes(request, response);
+        getRedirectStrategy().sendRedirect(request, response, targetUrl);
+    }
+
+    protected String determineTargetUrl(HttpServletRequest request, HttpServletResponse response, Authentication authentication) {
+        SimpleDateFormat formatter = new SimpleDateFormat ( "yyyy/MM/dd HH:mm:ss", Locale.KOREA );
+        Optional<String> redirectUri = CookieUtils.getCookie(request, REDIRECT_URI_PARAM_COOKIE_NAME).map(Cookie::getValue);
+
+        if (!redirectUri.isPresent()) {
+            throw new BadRequestException("인증되지 않은 REDIRECT_URI입니다.");
+        }
+
+        String targetUri = redirectUri.orElse(getDefaultTargetUrl());
+
+        UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
+        AuthResponse accessAndRefreshToken = authService.createAccessAndRefreshToken(userPrincipal.getId());
+        Token accessToken = accessAndRefreshToken.getAccessToken();
+        Token refreshToken = accessAndRefreshToken.getRefreshToken();
+
+        return UriComponentsBuilder.fromUriString(targetUri)
+                .queryParam("accessToken",accessToken.getJwtToken())
+                .queryParam("accessTokenExpiryDate", formatter.format(accessToken.getExpiryDate()))
+                .queryParam("refreshToken", refreshToken.getJwtToken())
+                .queryParam("refreshTokenExpiryDate", formatter.format(refreshToken.getExpiryDate()))
+                .build().toUriString();
+    }
+
+    protected void clearAuthenticationAttributes(HttpServletRequest request, HttpServletResponse response) {
+        super.clearAuthenticationAttributes(request);
+        httpCookieOAuth2AuthorizationRequestRepository.removeAuthorizationRequestCookies(request, response);
+    }
+}
+```
+
+
+
+#### OAuth2AuthenticationFailureHandler
+
+> OAuth2 인증 중 오류가 발생하면 Spring Security는 Spring SecurityConfig에서 구성한 OAuth2AuthenticationFailureHandler의 onAuthenticationFailure () 메서드를 호출
+>
+> 쿼리 문자열에 추가 된 오류 메시지와 함께 사용자를 frontEndClient로 보냄.
+
+##### OAuth2AuthenticationFailureHandler.class
+
+```java
+@Component
+public class OAuth2AuthenticationFailureHandler extends SimpleUrlAuthenticationFailureHandler {
+
+    @Autowired
+    HttpCookieOAuth2AuthorizationRequestRepository httpCookieOAuth2AuthorizationRequestRepository;
+
+    @Override
+    public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response, AuthenticationException exception) throws IOException, ServletException {
+        String targetUrl = CookieUtils.getCookie(request, REDIRECT_URI_PARAM_COOKIE_NAME)
+                .map(Cookie::getValue)
+                .orElse(("/"));
+
+        targetUrl = UriComponentsBuilder.fromUriString(targetUrl)
+                .queryParam("error", exception.getLocalizedMessage())
+                .build()
+                .toUriString();
+
+        httpCookieOAuth2AuthorizationRequestRepository.removeAuthorizationRequestCookies(request, response);
+
+        getRedirectStrategy().sendRedirect(request, response, targetUrl);
+    }
+}
+```
+
