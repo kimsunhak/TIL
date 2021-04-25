@@ -1,6 +1,4 @@
-## Spring Social-Login 정리
-
-
+## 생ㅅSpring Social-Login 정리
 
 ### CORS 활성화
 
@@ -26,8 +24,6 @@ public class WebMvcConfig implements WebMvcConfigurer {
     }
 }
 ```
-
-
 
 ### SecurityConfig 설정
 
@@ -155,8 +151,6 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 }
 ```
 
-
-
 #### AppProperties 바인딩 방법
 
 > @ConfigurationProperties 란?
@@ -167,7 +161,7 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
 ##### config / AppProperties.class
 
-~~~java
+```java
 @Getter
 @ConfigurationProperties(prefix = "app")
 public class AppProperties {
@@ -195,7 +189,7 @@ public class AppProperties {
         }
     }
 }
-~~~
+```
 
 ##### *.properties
 
@@ -204,15 +198,13 @@ public class AppProperties {
 app.naver=https://www.naver.com
 ```
 
-
-
 #### AppProperties 활성화
 
 > @EnableConfigurationProperties 을 사용하여 AppProperties를 활성화해야 사용가능
 
 ##### MainApplication.class
 
-~~~java
+```java
 @EnableConfigurationProperties(AppProperties.class)
 public class MainApplication {
 
@@ -220,26 +212,45 @@ public class MainApplication {
         SpringApplication.run(MainApplication.class, args);
     }
 }
-~~~
+```
+
+------
+
+### Custmon CurrentUser Annotation 생성
+
+> CurrentUser Annotation은  RUNTIME까지 유지가 되어야 함
+>
+> @Retention(RetentionPolicy.RUNTIME) 로 설정
+>
+>
+> Target은 @Target(ElementType.PARAMETER) Parameter에 줄 수 있도록 설정.
+>
+> 현재 인증된 정보를 확인하고 account를 전송
+
+```java
+@Target({ElementType.PARAMETER, ElementType.TYPE})
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+@AuthenticationPrincipal
+public @interface CurrentUser {
+}
+```
+
+
 
 ------
 
 ### JWT 설정
 
-`package : security `
-
-
+```
+package : security
+```
 
 #### JWT TokenProvider
 
 > JSON 웹 토큰을 생성하고 확인하는 코드를 만듬
 >
-> .claim : Token에 담을 정보
-> .setSubject : Token 제목
-> .setIssuedAt : 토큰 발급 시간
-> .setExpiration : 토큰 만료 시간
-> .signWith : 사용할 알고리즘과, 시크릿값 셋팅
-> .compact : 토큰 생성
+> .claim : Token에 담을 정보 .setSubject : Token 제목 .setIssuedAt : 토큰 발급 시간 .setExpiration : 토큰 만료 시간 .signWith : 사용할 알고리즘과, 시크릿값 셋팅 .compact : 토큰 생성
 
 ##### security / TokenProvider.class
 
@@ -399,11 +410,7 @@ public class TokenProvider {
     }
 
 }
-
-
 ```
-
-
 
 #### JWT TokenAuthenticationFilter
 
@@ -488,8 +495,6 @@ public class TokenAuthenticationFilter extends OncePerRequestFilter {
 }
 ```
 
-
-
 #### JWT RestAuthenticationEntryPoint
 
 > 사용자가 인증없이 보호 된 리소스에 액세스하려고 할 때 호출됩니다. 이 경우 401 Unauthorized 응답을 반환
@@ -504,13 +509,9 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
 }
 ```
 
-
-
 ------
 
 ## OAuth2 설정
-
-
 
 ### OAuth2 인증을위한 사용자 정의 클래스
 
@@ -575,8 +576,6 @@ public class GoogleOAuth2UserInfo extends OAuth2UserInfo{
 }
 ```
 
-
-
 #### HttpCookieOAuth2AuthorizationRequestRepository
 
 > OAuth2 프로토콜은 `state`CSRF 공격을 방지하기 위해 매개 변수 사용을 권장
@@ -631,12 +630,9 @@ public class HttpCookieOAuth2AuthorizationRequestRepository implements Authoriza
 }
 ```
 
-
-
 #### CustomOAuth2UserService
 
-> `CustomOAuth2UserService` 는 Spring Security의 `DefaultOAuth2UserService` 상속하고 `loadUser()` 메소드를 구현
-> 이 메소드는 OAuth2 공급자로부터 액세스 토큰을 얻은 후에 호출
+> `CustomOAuth2UserService` 는 Spring Security의 `DefaultOAuth2UserService` 상속하고 `loadUser()` 메소드를 구현 이 메소드는 OAuth2 공급자로부터 액세스 토큰을 얻은 후에 호출
 >
 > 먼저 OAuth2 공급자로부터 사용자의 세부 정보를 가져오고 동일한 이메일을 사용하는 사용자가 이미 데이터베이스에 있는 경우 세부 정보를 업데이트하고 그렇지 않으면 새 사용자를 등록
 
@@ -709,8 +705,6 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 }
 ```
 
-
-
 #### OAuth2AuthenticationSuccessHandler
 
 > 인증에 성공하면 Spring Security는 `SecurityConfig` 에 구성된 `OAuth2AuthenticationSuccessHandler` 의 `onAuthenticationSuccess()` 메소드를 호출
@@ -769,8 +763,6 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
 }
 ```
 
-
-
 #### OAuth2AuthenticationFailureHandler
 
 > OAuth2 인증 중 오류가 발생하면 Spring Security는 Spring SecurityConfig에서 구성한 OAuth2AuthenticationFailureHandler의 onAuthenticationFailure () 메서드를 호출
@@ -803,4 +795,6 @@ public class OAuth2AuthenticationFailureHandler extends SimpleUrlAuthenticationF
     }
 }
 ```
+
+
 
