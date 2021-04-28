@@ -1,4 +1,4 @@
-## 생ㅅSpring Social-Login 정리
+## Spring Social-Login 정리
 
 ### CORS 활성화
 
@@ -643,7 +643,10 @@ public class HttpCookieOAuth2AuthorizationRequestRepository implements Authoriza
 @RequiredArgsConstructor
 public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 
+    private static final Logger logger = LoggerFactory.getLogger(CustomOAuth2UserService.class);
+
     private final MemberRepository memberRepository;
+
     private final AppProperties appProperties;
 
     @Override
@@ -662,19 +665,17 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
     private OAuth2User processOAuth2User(OAuth2UserRequest oAuth2UserRequest, OAuth2User oAuth2User) {
         OAuth2UserInfo oAuth2UserInfo = OAuth2UserInfoFactory.getOAuth2UserInfo(oAuth2UserRequest.getClientRegistration().getRegistrationId(), oAuth2User.getAttributes());
 
-        if (StringUtils.isEmpty(oAuth2UserInfo.getEmail())) {
-            throw new OAuth2AuthenticationProcessingException("OAuth2 Provider에 이메일이 없습니다.");
-        }
+        logger.info("OAuth2UserInfo : {}", oAuth2UserInfo.getEmail());
+        validateEmail(oAuth2UserInfo);
 
-        Optional<Member> memberOptional = memberRepository.findByEmail(oAuth2UserInfo.getEmail());
+        Optional<Member> memberOptionalEmail = memberRepository.findByEmail(oAuth2UserInfo.getEmail());
 
         Member member;
-        if (memberOptional.isPresent()) {
-            member = memberOptional.get();
+        if (memberOptionalEmail.isPresent()) {
+            member = memberOptionalEmail.get();
             if (!member.getProvider().equals(AuthProvider.valueOf(oAuth2UserRequest.getClientRegistration().getRegistrationId()))) {
                 throw new OAuth2AuthenticationProcessingException("이미 등록된 회원입니다.");
             }
-
             member = updateExistingMember(member, oAuth2UserInfo);
         } else {
             member = registerNewMember(oAuth2UserRequest, oAuth2UserInfo);
@@ -692,6 +693,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
                 .provider(authProvider)
                 .providerId(oAuth2UserInfo.getId())
                 .imageUrl(oAuth2UserInfo.getImageUrl())
+                .role(Role.ROLE_MEMBER)
                 .build();
 
         return memberRepository.save(member);
@@ -702,7 +704,13 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         return memberRepository.save(member);
     }
 
+    private void validateEmail(OAuth2UserInfo oAuth2UserInfo) {
+        if (StringUtils.isEmpty(oAuth2UserInfo.getEmail())) {
+            throw new OAuth2AuthenticationProcessingException("OAuth2 Provider에서 이메일을 찾을 수 없습니다.");
+        }
+    }
 }
+
 ```
 
 #### OAuth2AuthenticationSuccessHandler
@@ -795,6 +803,8 @@ public class OAuth2AuthenticationFailureHandler extends SimpleUrlAuthenticationF
     }
 }
 ```
+
+
 
 
 
