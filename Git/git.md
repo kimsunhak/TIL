@@ -53,6 +53,7 @@
   ```
   
 ### GitHub MacOS Push Error
-### remote: Repository not found. <br>
-### fatal: repository 'https://github.com/userName/repository.git/' not found <br>
-아래 명령어 사용 <br> git remote set-url origin https://userName@github.com/userName/repository.git
+#### remote: Repository not found. <br>
+#### fatal: repository 'https://github.com/userName/repository.git/' not found <br>
+아래 명령어 사용 <br> 
+- git remote set-url origin https://userName@github.com/userName/repository.git
