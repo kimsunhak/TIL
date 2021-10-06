@@ -1,4 +1,7 @@
-## Lamda
+##  Lamda
+
+**람다함수란?**
+람다 함수는 프로그래밍 언어에서 사용되는 개념으로 **익명 함수(Anonymous functions)** 를 지칭하는 용어
 
 람다 표현식
 
@@ -16,7 +19,7 @@ person.hello(new Hi() {
 		System.out.println("안녕");
 		System.out.println("반가워");
 		System.out.println("내 이름은 : " + msg);
-		return "String";₩
+		return "String";
 	}
 });
 
