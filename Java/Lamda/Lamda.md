@@ -29,5 +29,5 @@ person.hello((name) -> {
 	System.out.println("내 이름은 : " + msg);
 
 	return "String";
-})
+});
 ```
