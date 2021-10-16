@@ -17,4 +17,4 @@
 - [프로세스 & 스레드](https://github.com/kimsunhak/TIL/blob/main/Java/프로세스&쓰레드/Process&Thread.md)
 
 #### 알고리즘
-- [알고리즘] (https://github.com/kimsunhak/TIL/blob/main/PS/ps.md)
+- [알고리즘](https://github.com/kimsunhak/TIL/blob/main/PS/ps.md)
