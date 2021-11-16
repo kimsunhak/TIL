@@ -168,5 +168,12 @@ ENTRYPOINT ["java","-cp","app:app/lib/*","com.service.TestServiceApplication"]
 
 ```
 
+#### 실행
+``` shell
+docker build -t [생성할 이미지명 / artifact ] [Dockerfile 위치]
+
+docker build -t spring/spring-boot .
+```
+
 
 
