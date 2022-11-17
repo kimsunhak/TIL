@@ -10,8 +10,6 @@ Flutter의 새로운 프로젝트를 생성할때 이름은 스네이크 케이�
 flutter create test_app
 ```
 
-
-
 ## 주요 폴더 및 파일
 
 ---
@@ -27,8 +25,6 @@ Node의 **package.json** 과 비슷한 역할을 함.
 Flutter 코드 베이스를 저장하는 폴더입니다.
 
 Flutter는 하나의 코드베이스로 IOS, Android 앱을 동시에 개발할 수 있습니다.
-
-
 
 ## Naming 규칙
 
@@ -61,3 +57,30 @@ flutter pub run build_runner watch
 상태를 가질 수 있는 위젯
 
 Intellij 기준 단축어 : stful
+
+
+
+
+
+## IOS & Android 설정
+
+---
+
+### 앱 이름 변경
+
+IOS : info.plist
+
+```plist
+<key>CFBundleDisplayName</key>
+<string>[App Name]</string>
+```
+
+Android : AndroidManifest.xml
+
+```xml
+<aaplication
+    android:label="[App Name]"
+    android:icon="@mipmap/launcher_icon"
+>
+</apllication>
+```
