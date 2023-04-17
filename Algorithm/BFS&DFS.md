@@ -16,7 +16,7 @@
 >   - 방문하지 않은 노드들을 `Queue`에 `push`
 >   - 
 
-<p align="center"><img src="../../assets/graph.png" alt="graph" width="300" /></p>
+<p align="center"><img src="../assets/graph.png" alt="graph" width="300" /></p>
 
 ```kotlin
 import java.util.*
