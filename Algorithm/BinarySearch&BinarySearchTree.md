@@ -53,8 +53,8 @@ class BinaryTree<T>(
 }
 
 fun main() {
-    val node:Node<Char> = Node('A',Node('B',Node('D'),Node('E')),Node('C',Node('F'),Node('G')))
-    val tree:BinaryTree<Char> = BinaryTree()
+    val node: Node<Char> = Node('A', Node('B', Node('D'), Node('E')), Node('C', Node('F'), Node('G')))
+    val tree: BinaryTree<Char> = BinaryTree()
     print("preorder result : ")
     tree.preorder(node)
     println()
@@ -66,17 +66,15 @@ fun main() {
 }
 ```
 
-
-
 #### 이진 탐색 트리 (Binary Search Tree, BST)
 
-> 이진 탐색 트리란? 각 노드가 최대 두개의 자식을 갖는 트리이며, 
+> 이진 탐색 트리란? 각 노드가 최대 두개의 자식을 갖는 트리이며,
 > 즉 왼쪽 자식 노드는 부모 노드 보다 값이 작고, 오른쪽 자식 노드는 부모보다 값이 크다
 >
 > 메서드 구현 : 검색, 삽입, 삭제
 >
 > 시간복잡도 : O(logN)
-> 공간복잡도 : O(N) 
+> 공간복잡도 : O(N)
 
 구현 코드 : `kotlin`
 
